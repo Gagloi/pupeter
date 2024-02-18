@@ -6,13 +6,20 @@ const express = require('express')
 const app = express()
 const port = process.env.PORT;
 
+let browser = {}
 app.use(express.json())
 
 app.post('/', async (req, res) => {
     try {
+        if (Object.keys(req.body).length === 0) {
+            console.warn('Request body must not be empty!')
+            res.status(404).send({message: 'Request body must not be empty!'})
+        }
         const requestHeaders = req.body.headers
         const requestCookies = req.body.cookies
-        const html = await emulateBrowser(req.query.url, requestHeaders, requestCookies)
+        console.log(`Requesting content from URL: ${req.query.url} ...`)
+        console.log(`With headers: ${JSON.stringify(requestHeaders)} cookies: ${JSON.stringify(requestCookies)}`)
+        const html = await getContentFromPage(req.query.url, requestHeaders, requestCookies)
         res.send(html)
     } catch (err) {
         console.error(err)
@@ -20,13 +27,13 @@ app.post('/', async (req, res) => {
     }
 })
 
-app.listen(port, () => {
+app.listen(port, async () => {
+    // Launch headless Chrome browser
+    browser = await puppeteer.launch({args: ['--no-sandbox'], executablePath: '/usr/bin/google-chrome'});
     console.log(`App listening on port ${port}`)
 })
 
-const emulateBrowser = async (url, requestHeaders, requestCookies) => {
-    // Launch headless Chrome browser
-    const browser = await puppeteer.launch({args: ['--no-sandbox'], executablePath: '/usr/bin/google-chrome'});
+const getContentFromPage = async (url, requestHeaders, requestCookies) => {
 
     // Open a new page
     const page = await browser.newPage();
@@ -37,7 +44,9 @@ const emulateBrowser = async (url, requestHeaders, requestCookies) => {
     await page.setCookie(...cookies)
     await page.goto(url, {timeout: process.env.SITE_NAVIGATION_TIMEOUT});
 
-    return await page.content()
+    const html = await page.content()
+    await page.close()
+    return html
 };
 
 const mapCookies = (requestCookies, url) => {
