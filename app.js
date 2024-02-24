@@ -19,7 +19,7 @@ app.post('/', async (req, res) => {
         const requestCookies = req.body.cookies
         console.log(`Requesting content from URL: ${req.query.url} ...`)
         console.log(`With headers: ${JSON.stringify(requestHeaders)} cookies: ${JSON.stringify(requestCookies)}`)
-        const html = await getContentFromPage(req.query.url, requestHeaders, requestCookies)
+        const html = await getContentFromPage(req.query.url, requestHeaders, requestCookies, req.body.awaitedResponse)
         res.send(html)
     } catch (err) {
         console.error(err)
@@ -33,7 +33,7 @@ app.listen(port, async () => {
     console.log(`App listening on port ${port}`)
 })
 
-const getContentFromPage = async (url, requestHeaders, requestCookies) => {
+const getContentFromPage = async (url, requestHeaders, requestCookies, awaitedResponse) => {
 
     // Open a new page
     const page = await browser.newPage();
@@ -42,15 +42,23 @@ const getContentFromPage = async (url, requestHeaders, requestCookies) => {
     const cookies = mapCookies(requestCookies, url)
 
     await page.setCookie(...cookies)
-    await page.goto(url, {timeout: process.env.SITE_NAVIGATION_TIMEOUT});
 
-    await page.waitForFunction(
-        'window.performance.timing.loadEventEnd - window.performance.timing.navigationStart >= 500'
-    );
+    let promises = [page.goto(url, {waitUntil: "domcontentloaded", timeout: process.env.SITE_NAVIGATION_TIMEOUT})]
 
-    const html = await page.content()
-    await page.close()
-    return html
+    if (awaitedResponse) {
+        promises.push(
+            page.waitForResponse(res =>
+            res.url().includes(awaitedResponse) && res.status() === 200, {timeout: process.env.REQUEST_TIMEOUT})
+        )
+    }
+
+    return await Promise.all(promises).then(() =>
+        setTimeout(() => ({}), 1000)
+    ).then(() => {
+        let content = page.content()
+        page.close();
+        return content
+    });
 };
 
 const mapCookies = (requestCookies, url) => {
