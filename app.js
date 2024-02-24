@@ -44,6 +44,10 @@ const getContentFromPage = async (url, requestHeaders, requestCookies) => {
     await page.setCookie(...cookies)
     await page.goto(url, {timeout: process.env.SITE_NAVIGATION_TIMEOUT});
 
+    await page.waitForFunction(
+        'window.performance.timing.loadEventEnd - window.performance.timing.navigationStart >= 500'
+    );
+
     const html = await page.content()
     await page.close()
     return html
