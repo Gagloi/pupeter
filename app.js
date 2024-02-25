@@ -3,6 +3,7 @@ const Stealth = require('puppeteer-extra-plugin-stealth')
 puppeteer.use(Stealth())
 
 const express = require('express')
+const e = require("express");
 const app = express()
 const port = process.env.PORT;
 
@@ -38,27 +39,32 @@ const getContentFromPage = async (url, requestHeaders, requestCookies, awaitedRe
     // Open a new page
     const page = await browser.newPage();
 
-    await page.setExtraHTTPHeaders({...requestHeaders})
-    const cookies = mapCookies(requestCookies, url)
+    try {
+        await page.setExtraHTTPHeaders({...requestHeaders})
+        const cookies = mapCookies(requestCookies, url)
 
-    await page.setCookie(...cookies)
+        await page.setCookie(...cookies)
 
-    let promises = [page.goto(url, {waitUntil: "domcontentloaded", timeout: process.env.SITE_NAVIGATION_TIMEOUT})]
+        let promises = [page.goto(url, {waitUntil: "domcontentloaded", timeout: process.env.SITE_NAVIGATION_TIMEOUT})]
 
-    if (awaitedResponse) {
-        promises.push(
-            page.waitForResponse(res =>
-            res.url().includes(awaitedResponse) && res.status() === 200, {timeout: process.env.REQUEST_TIMEOUT})
-        )
+        if (awaitedResponse) {
+            promises.push(
+                page.waitForResponse(res =>
+                    res.url().includes(awaitedResponse) && res.status() === 200, {timeout: process.env.REQUEST_TIMEOUT})
+            )
+        }
+
+        return await Promise.all(promises).then(() =>
+            setTimeout(() => ({}), 1000)
+        ).then(() => {
+            let content = page.content()
+            page.close();
+            return content
+        });
+    } catch (err) {
+        await page.close()
+        throw err
     }
-
-    return await Promise.all(promises).then(() =>
-        setTimeout(() => ({}), 1000)
-    ).then(() => {
-        let content = page.content()
-        page.close();
-        return content
-    });
 };
 
 const mapCookies = (requestCookies, url) => {
